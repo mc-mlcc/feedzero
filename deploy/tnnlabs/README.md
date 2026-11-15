@@ -32,6 +32,7 @@ so never point a browser at `http://<nas>:3000`.
 | `scripts/lib/deploy-image.mjs` | dev machine | Tag/credential logic (unit-tested). |
 | `deploy/tnnlabs/docker-compose.yml` | server | Pull-only compose matching `macvlan_net`. |
 | `deploy/tnnlabs/.env` | server | Pinned version, data path, port. |
+| `deploy/tnnlabs/UPDATE.md` | both | Step-by-step redeploy runbook. |
 
 ## One-time setup
 
@@ -81,54 +82,28 @@ The compose file joins the existing `macvlan_net` (`external: true`), so the
 network must already exist and the reverse proxy must be able to reach the
 container.
 
-## The update loop
+## Updating
 
-Whenever upstream moves:
+Every update is the same two-machine loop. The step-by-step runbook — merge,
+deploy, pull, verify, rollback, and what to do when a step fails — is
+**[UPDATE.md](./UPDATE.md)**.
 
 ```powershell
-git switch docker
-git fetch upstream
-git merge upstream/main          # resolve conflicts, run npm test if you like
+# DEV MACHINE
+git switch docker && git fetch upstream && git merge upstream/main
 pwsh ./scripts/deploy-image.ps1
 ```
 
-The script refuses to publish anything unless the built image answers
-`/api/health` with **the version and commit it was built from**, serves the
-SPA, and round-trips a vault through the mounted volume. It prints the tags it
-pushed at the end.
-
-Then on the server:
-
 ```bash
+# SERVER
 docker compose -f deploy/tnnlabs/docker-compose.yml pull
 docker compose -f deploy/tnnlabs/docker-compose.yml up -d
+curl -s https://feedzero.tnnlabs.space/api/health   # commit must match the build
 ```
 
-## Verifying that a deploy actually landed
-
-A `docker compose up -d` that exits 0 does not prove the new build is serving.
-Ask the deployment itself:
-
-```bash
-curl -s https://feedzero.tnnlabs.space/api/health
-# {"ok":true,"version":"0.18.1","commit":"f9d0453","time":"..."}
-```
-
-`commit` is the short SHA baked in at build time. It must match the commit the
-deploy script printed. If it reads `"unknown"`, the image was built without
-`GIT_COMMIT_SHA` (i.e. not through `scripts/deploy-image.ps1`).
-
-## Rolling back
-
-Every build publishes an immutable `sha-<commit>` tag. Pin one:
-
-```bash
-# deploy/tnnlabs/.env
-FEEDZERO_VERSION=sha-f9d0453
-```
-
-…then `docker compose up -d` (no `pull` needed if the image is already local,
-otherwise `pull` first). Release tags (`v0.18.1`) work too.
+The deploy script publishes nothing unless the built image answers
+`/api/health` with the version and commit it was built from, serves the SPA,
+and round-trips a vault through the mounted volume.
 
 ## Reverse proxy (Nginx Proxy Manager)
 

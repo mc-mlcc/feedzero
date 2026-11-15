@@ -114,7 +114,9 @@ docker compose pull && docker compose up -d
 ```
 
 A pull-only compose for this workflow, with the TLS left to an existing
-reverse proxy, lives in [deploy/tnnlabs/](../deploy/tnnlabs/README.md).
+reverse proxy, lives in [deploy/tnnlabs/](../deploy/tnnlabs/README.md); its
+step-by-step update runbook is
+[deploy/tnnlabs/UPDATE.md](../deploy/tnnlabs/UPDATE.md).
 
 ## What you give up vs. the hosted version
 
