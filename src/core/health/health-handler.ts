@@ -60,12 +60,14 @@ function readViteAppVersion(): string | undefined {
  * version bump, so `version` cannot answer "is MY change live?" — the commit
  * can. `/ship` polls this until it matches the SHA it merged.
  *
- * Vercel injects `VERCEL_GIT_COMMIT_SHA` at build time. Self-hosted images
- * have no such variable, so this degrades to "unknown" rather than failing:
+ * Vercel injects `VERCEL_GIT_COMMIT_SHA` at build time. A self-hosted image
+ * has no such metadata, so the Docker build bakes in `GIT_COMMIT_SHA`
+ * instead (see Dockerfile and scripts/deploy-image.ps1) — same answer, same
+ * field. When neither exists this degrades to "unknown" rather than failing:
  * health is the one endpoint that must answer even when it knows least.
  */
 function resolveCommit(): string {
-  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA;
   return sha ? sha.slice(0, 7) : "unknown";
 }
 

@@ -6,6 +6,8 @@ coverage/
 .env
 .env.*
 !.env.example
+# Private-registry publish credentials for scripts/deploy-image.ps1.
+!.env.deploy.example
 test-results/
 playwright-report/
 # Personal Claude Code config + permissions, not for the public repo.

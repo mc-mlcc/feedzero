@@ -29,11 +29,20 @@ RUN npm run build:all
 FROM node:${NODE_VERSION} AS runtime
 WORKDIR /app
 
+# Build identity. scripts/deploy-image.ps1 passes the package.json version and
+# the commit it is building, so `/api/health` can answer "which build is this
+# container running?" — the only way to prove a deploy actually landed.
+# Defaults to "unknown" so a plain `docker build` still works.
+ARG APP_VERSION=unknown
+ARG GIT_COMMIT_SHA=unknown
+
 ENV NODE_ENV=production \
     SELF_HOSTED=1 \
     SYNC_STORAGE=filesystem \
     DATA_DIR=/data \
-    PORT=3000
+    PORT=3000 \
+    APP_VERSION=${APP_VERSION} \
+    GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
 # Production deps only. `tsx` is needed at runtime because `serve`
 # launches `node --import tsx server.ts` to handle TypeScript on the fly.

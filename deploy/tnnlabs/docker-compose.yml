@@ -1,0 +1,55 @@
+# FeedZero on the home server.
+#
+# Pulls the image published by scripts/deploy-image.ps1 from the private
+# registry; nothing is built here. A reverse proxy (Nginx Proxy Manager)
+# terminates TLS and forwards to this container — the app itself is served
+# over plain HTTP inside the network, which is safe because NPM is the only
+# thing that exposes it.
+#
+#   docker compose -f deploy/tnnlabs/docker-compose.yml pull
+#   docker compose -f deploy/tnnlabs/docker-compose.yml up -d
+#
+# Copy this directory to the server, or keep the repo checkout there and
+# point compose at this file. See deploy/tnnlabs/README.md.
+
+name: feedzero
+
+networks:
+  # Pre-existing network — `external: true` means compose joins it and never
+  # creates or deletes it. The reverse proxy must be on this network too (or
+  # reachable from it) for `feedzero:3000` to resolve.
+  macvlan_net:
+    external: true
+    name: macvlan_net
+
+services:
+  feedzero:
+    container_name: feedzero
+    # Never a `build:` section here: the NAS has no toolchain, and a build
+    # section would make `compose pull` a no-op. Images are built on the dev
+    # machine and pushed to hub.tnnlabs.space.
+    #
+    # Pin a release with FEEDZERO_VERSION=v0.18.1 in .env. `latest` is what
+    # the update loop follows.
+    image: hub.tnnlabs.space/feedzero:${FEEDZERO_VERSION:-latest}
+    environment:
+      TZ: ${TZ:-Asia/Hong_Kong}
+      # Self-host master switch, baked at build time too (VITE_SELF_HOSTED).
+      # Without it the UI shows subscription surfaces the server won't serve.
+      SELF_HOSTED: "1"
+      # Vaults on disk under DATA_DIR/vaults. Keep this equal to the mount
+      # point below — resolveAdapter reads DATA_DIR, not a relative path.
+      SYNC_STORAGE: filesystem
+      DATA_DIR: /data
+      PORT: "3000"
+    networks:
+      macvlan_net:
+    ports:
+      # Host 3000 -> container 3000. Nginx Proxy Manager forwards
+      # https://feedzero.tnnlabs.space to this port.
+      - "${HOST_PORT:-3000}:3000"
+    restart: unless-stopped
+    volumes:
+      # Encrypted vaults. Host path on the Olympus array; back this up (it is
+      # useless without the passphrase, which never leaves the browser).
+      - ${DATA_DIR:-/mnt/Olympus/Docker/feedzero/data}:/data

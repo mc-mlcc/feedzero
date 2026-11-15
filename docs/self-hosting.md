@@ -86,6 +86,28 @@ bind mount needs the repo files on disk, and Portainer pulls (it won't build).
 Deploy via Portainer's **Repository** stack method pointing at this repo, or
 SSH in and run `./scripts/feedzero up`.
 
+## Private registry (fork) images
+
+If you run your own registry and fork of this repo, build and publish from the
+fork instead of pulling GHCR:
+
+```powershell
+Copy-Item .env.deploy.example .env.deploy   # IMAGE + registry credentials
+pwsh ./scripts/deploy-image.ps1             # test, build, tag, push
+```
+
+The script publishes `vX.Y.Z`, `X.Y`, `latest` and an immutable `sha-<commit>`
+tag, and refuses to push until the built image has answered `/api/health` with
+the version and commit it was built from, served the SPA, and round-tripped a
+vault through its data volume. The server then only needs to pull:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+A pull-only compose for this workflow, with the TLS left to an existing
+reverse proxy, lives in [deploy/tnnlabs/](../deploy/tnnlabs/README.md).
+
 ## What you give up vs. the hosted version
 
 - **IP reputation / rate-limiting** — fresh server IPs can hit upstream WAFs

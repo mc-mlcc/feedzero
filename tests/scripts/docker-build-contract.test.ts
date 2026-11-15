@@ -14,10 +14,18 @@
  *   2. The `prepare` script tolerates husky being absent.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const REPO = path.resolve(__dirname, "../..");
+
+function readRepoFile(relativePath: string): string {
+  const fullPath = path.join(REPO, relativePath);
+  if (!existsSync(fullPath)) {
+    throw new Error(`expected deployment artifact ${relativePath} to exist`);
+  }
+  return readFileSync(fullPath, "utf8");
+}
 
 describe("docker build / prod install contract (#212)", () => {
   it("Dockerfile installs prod deps with --ignore-scripts", () => {
@@ -116,5 +124,76 @@ describe("self-host sync storage contract (#224)", () => {
     // than any mention, so the comments explaining the history don't trip it.
     expect(dockerfile).not.toMatch(/SYNC_FILESYSTEM_DIR\s*=/);
     expect(compose).not.toMatch(/^\s*SYNC_FILESYSTEM_DIR\s*:/m);
+  });
+});
+
+/**
+ * The private-registry deployment (deploy/tnnlabs) runs the image built by
+ * scripts/deploy-image.ps1 behind an existing Nginx Proxy Manager instance.
+ *
+ * It is a *different* contract from the root docker-compose.yml: the server
+ * never builds, never terminates TLS itself, and persists vaults on a host
+ * path the owner backs up. Those differences are the point of the file, so
+ * they are asserted rather than left to the reader.
+ */
+describe("private-registry compose (deploy/tnnlabs)", () => {
+  const compose = readRepoFile("deploy/tnnlabs/docker-compose.yml");
+
+  it("pulls the published image instead of building on the server", () => {
+    // A `build:` section would make `docker compose up` compile the app on a
+    // NAS, and `pull` would silently stop updating anything.
+    expect(compose).toMatch(
+      /image:\s*hub\.tnnlabs\.space\/feedzero:\$\{FEEDZERO_VERSION:-latest\}/,
+    );
+    expect(compose).not.toMatch(/^\s*build:/m);
+  });
+
+  it("publishes the port the reverse proxy targets", () => {
+    // Host port stays overridable (NPM may already own 3000 on the box), but
+    // the container side is fixed at 3000 — that's what the server binds.
+    expect(compose).toMatch(/\$\{HOST_PORT:-3000\}:3000/);
+  });
+
+  it("persists vaults on a host path mounted at /data", () => {
+    // resolveAdapter writes {DATA_DIR}/vaults; DATA_DIR must be the mount
+    // point, not a relative path inside the image.
+    expect(compose).toMatch(/DATA_DIR:\s*\/data\b/);
+    expect(compose).toMatch(/\$\{DATA_DIR:-[^}]*\}:\/data/);
+    expect(compose).not.toMatch(/^\s*SYNC_FILESYSTEM_DIR\s*:/m);
+  });
+
+  it("runs in self-hosted mode with filesystem sync", () => {
+    expect(compose).toMatch(/SELF_HOSTED:\s*"?1"?/);
+    expect(compose).toMatch(/SYNC_STORAGE:\s*filesystem/);
+    expect(compose).toMatch(/PORT:\s*"?3000"?/);
+  });
+
+  it("joins the existing macvlan network without creating one", () => {
+    expect(compose).toMatch(/name:\s*macvlan_net/);
+    expect(compose).toMatch(/external:\s*true/);
+  });
+
+  it("restarts after a host reboot", () => {
+    expect(compose).toMatch(/restart:\s*unless-stopped/);
+  });
+});
+
+/**
+ * `/api/health` is how a deploy is verified ("did MY commit go live?"). The
+ * Hono server reads APP_VERSION/GIT_COMMIT_SHA from the process environment;
+ * without them baked in at build time, a self-hosted image reports
+ * `version: "unknown", commit: "unknown"` and no deploy can be proven.
+ */
+describe("image build identity", () => {
+  const dockerfile = readRepoFile("Dockerfile");
+
+  it("accepts APP_VERSION and GIT_COMMIT_SHA as build args", () => {
+    expect(dockerfile).toMatch(/^ARG APP_VERSION=/m);
+    expect(dockerfile).toMatch(/^ARG GIT_COMMIT_SHA=/m);
+  });
+
+  it("exposes those build args to the running server", () => {
+    expect(dockerfile).toMatch(/APP_VERSION=\$\{?APP_VERSION\}?/);
+    expect(dockerfile).toMatch(/GIT_COMMIT_SHA=\$\{?GIT_COMMIT_SHA\}?/);
   });
 });

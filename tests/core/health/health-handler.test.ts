@@ -88,6 +88,7 @@ describe("handleHealthRequest — deployed commit", () => {
 
   it("reports 'unknown' when no commit is injected, still 200", async () => {
     delete process.env.VERCEL_GIT_COMMIT_SHA;
+    delete process.env.GIT_COMMIT_SHA;
 
     // Self-hosted images have no Vercel git metadata; health must stay a 200
     // there rather than degrading the one endpoint that reports liveness.
@@ -109,5 +110,30 @@ describe("handleHealthRequest — deployed commit", () => {
 
     expect(res.status).toBe(503);
     expect((await res.json()).commit).toBe("fedcba9");
+  });
+
+  it("falls back to GIT_COMMIT_SHA for a self-hosted image", async () => {
+    // The Docker build bakes GIT_COMMIT_SHA in; there is no Vercel metadata
+    // in a self-hosted container. Without this fallback the deploy script
+    // could not prove which commit the server is running.
+    delete process.env.VERCEL_GIT_COMMIT_SHA;
+    process.env.GIT_COMMIT_SHA = "0badc0de1234567890";
+
+    const body = await (
+      await handleHealthRequest(new Request("http://localhost/api/health"))
+    ).json();
+
+    expect(body.commit).toBe("0badc0d");
+  });
+
+  it("prefers Vercel's commit when both variables are present", async () => {
+    process.env.VERCEL_GIT_COMMIT_SHA = "aaaaaaa1111111";
+    process.env.GIT_COMMIT_SHA = "bbbbbbb2222222";
+
+    const body = await (
+      await handleHealthRequest(new Request("http://localhost/api/health"))
+    ).json();
+
+    expect(body.commit).toBe("aaaaaaa");
   });
 });
