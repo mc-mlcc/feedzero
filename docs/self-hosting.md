@@ -78,6 +78,14 @@ passphrase to restore.
   `docker compose build --no-cache --progress=plain feedzero`.
 - **Sync not working across devices** — both need the *same passphrase* and
   network access to `HOSTNAME` (a `.local` name won't resolve off-LAN).
+- **Sync fails with `EACCES: permission denied, mkdir '/data/vaults'`** — the
+  container runs as `node` (uid 1000) and your host data directory, which the
+  bind mount puts at `/data`, is owned by root. `docker compose up` creates a
+  missing directory as root. Fix it on the host:
+  `sudo chown -R 1000:1000 ./data` (or your `DATA_DIR`). A `healthy` container
+  does not mean the volume is writable — `/api/health` only reports liveness,
+  so check with
+  `docker exec feedzero sh -c 'touch /data/vaults/.probe && rm /data/vaults/.probe && echo writable'`.
 
 ### Portainer
 

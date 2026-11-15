@@ -52,4 +52,10 @@ services:
     volumes:
       # Encrypted vaults. Host path on the Olympus array; back this up (it is
       # useless without the passphrase, which never leaves the browser).
+      #
+      # The container runs as uid 1000 (`node`), and this mount replaces
+      # /data — including its ownership. The host directory must be owned by
+      # 1000:1000 or every vault write fails with EACCES:
+      #
+      #   sudo chown -R 1000:1000 /mnt/Olympus/Docker/feedzero/data
       - ${DATA_DIR:-/mnt/Olympus/Docker/feedzero/data}:/data

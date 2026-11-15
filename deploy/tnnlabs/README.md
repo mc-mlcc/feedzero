@@ -51,9 +51,31 @@ gitignored and never enters the Docker build context.
 ```bash
 cp .env.example .env
 # edit FEEDZERO_VERSION / DATA_DIR / HOST_PORT if needed
+```
+
+**Give the data directory to the container's user before starting.** The image
+runs as `node` (uid **1000**), and a bind mount replaces `/data` with your host
+directory — including its ownership. Docker creates a missing host directory as
+`root`, so the first vault write fails with
+`EACCES: permission denied, mkdir '/data/vaults'`:
+
+```bash
+sudo mkdir -p /mnt/Olympus/Docker/feedzero/data
+sudo chown -R 1000:1000 /mnt/Olympus/Docker/feedzero/data
+```
+
+Then start:
+
+```bash
 docker compose pull
 docker compose up -d
+docker exec feedzero sh -c 'touch /data/vaults/.probe && rm /data/vaults/.probe && echo writable'
 ```
+
+That last line is the check that matters — `docker compose ps` showing
+`healthy` does **not** prove the volume is writable, because `/api/health` only
+reports liveness. If `chown` fails or doesn't stick, the host path is a network
+share without POSIX ownership (SMB/NFS); use a local disk path instead.
 
 The compose file joins the existing `macvlan_net` (`external: true`), so the
 network must already exist and the reverse proxy must be able to reach the
@@ -131,6 +153,7 @@ useless without the user's passphrase, which never leaves the browser.
 | --- | --- |
 | `/api/health` fails, container healthy locally | NPM cannot reach `feedzero:3000` — check both containers share a network. |
 | `version: "unknown"` in health | Image built outside `deploy-image.ps1`, or with `-SkipLocalTest` and stale tags. |
+| Sync fails: `EACCES: permission denied, mkdir '/data/vaults'` | Host data directory is not owned by uid 1000 (Docker created it as root). `sudo chown -R 1000:1000 /mnt/Olympus/Docker/feedzero/data`. |
 | Browser: "Web Crypto refused to run" | You opened `http://`. Use the NPM HTTPS URL. |
 | `413` when syncing | NPM `client_max_body_size` too small — set 16 MB. |
 | `denied: requested access to the resource is denied` | The registry now requires auth — set `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` in `.env.deploy`. |
