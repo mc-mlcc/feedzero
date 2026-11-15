@@ -35,16 +35,16 @@ so never point a browser at `http://<nas>:3000`.
 
 ## One-time setup
 
-**Dev machine** — copy the credentials template and fill it in:
+**Dev machine** — copy the settings template:
 
 ```powershell
 Copy-Item .env.deploy.example .env.deploy
-notepad .env.deploy
 ```
 
-`IMAGE=hub.tnnlabs.space/feedzero` (no tag — the script adds tags) plus the
-registry username and password/token. `.env.deploy` is gitignored; never
-commit it.
+`IMAGE=hub.tnnlabs.space/feedzero` (no tag — the script adds tags) is all this
+registry needs. Add `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` only if it starts
+requiring auth; setting one without the other is rejected. `.env.deploy` is
+gitignored and never enters the Docker build context.
 
 **Server** — copy this directory over, then create its `.env`:
 
@@ -133,4 +133,5 @@ useless without the user's passphrase, which never leaves the browser.
 | `version: "unknown"` in health | Image built outside `deploy-image.ps1`, or with `-SkipLocalTest` and stale tags. |
 | Browser: "Web Crypto refused to run" | You opened `http://`. Use the NPM HTTPS URL. |
 | `413` when syncing | NPM `client_max_body_size` too small — set 16 MB. |
-| `denied: requested access to the resource is denied` | `docker login hub.tnnlabs.space` with the credentials in `.env.deploy`. |
+| `denied: requested access to the resource is denied` | The registry now requires auth — set `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` in `.env.deploy`. |
+| `npm test` fails on a Windows dev machine | Three suites (POSIX `sh`, `/`-separated allowlist paths) fail on `main` too; the deploy script excludes exactly those on Windows. |

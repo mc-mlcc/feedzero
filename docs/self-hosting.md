@@ -92,7 +92,7 @@ If you run your own registry and fork of this repo, build and publish from the
 fork instead of pulling GHCR:
 
 ```powershell
-Copy-Item .env.deploy.example .env.deploy   # IMAGE + registry credentials
+Copy-Item .env.deploy.example .env.deploy   # IMAGE (+ credentials if required)
 pwsh ./scripts/deploy-image.ps1             # test, build, tag, push
 ```
 

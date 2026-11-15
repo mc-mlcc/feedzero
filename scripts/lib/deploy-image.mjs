@@ -20,9 +20,8 @@
  * sha tag is always published — it is the only tag that names one tree.
  *
  * CLI: `node scripts/lib/deploy-image.mjs --version 0.18.1 --sha <full sha>`
- * prints a JSON plan on stdout and narration on stderr. Auth is required by
- * default (the exit-1 case); `--no-auth` is for a local-only build, where no
- * credentials are needed.
+ * prints a JSON plan on stdout and narration on stderr. Exit 1 on an invalid
+ * image path, version, or half-configured credentials.
  *
  * The option is `--deploy-env`, not `--env-file`: Node owns `--env-file` and
  * aborts with `node: .env.deploy: not found` (exit 9) before this script
@@ -206,22 +205,25 @@ export function parseEnvFile(text) {
  * Combines an env file with CLI overrides into the plan the deploy script
  * executes.
  *
+ * Credentials are optional: an anonymous registry accepts the push without a
+ * `docker login`. Half-configured credentials are rejected, because a typo'd
+ * key would otherwise turn a registry that *does* require auth into a
+ * confusing `unauthorized` at push time.
+ *
  * @param {{
  *   envText?: string,
  *   image?: string,
  *   version: string,
  *   sha: string,
- *   requireAuth?: boolean,
  *   includeLatest?: boolean,
  * }} params
- * @returns {{ ok: true, plan: { image: string, registry: string, tags: string[], version: string, minor: string, shortSha: string, username: string, password: string } } | { ok: false, error: string }}
+ * @returns {{ ok: true, plan: { image: string, registry: string, tags: string[], version: string, minor: string, shortSha: string, username: string, password: string, anonymous: boolean } } | { ok: false, error: string }}
  */
 export function resolveDeployPlan({
   envText = "",
   image,
   version,
   sha,
-  requireAuth = true,
   includeLatest = true,
 }) {
   const env = parseEnvFile(envText);
@@ -245,12 +247,13 @@ export function resolveDeployPlan({
 
   const username = env.values.REGISTRY_USERNAME ?? "";
   const password = env.values.REGISTRY_PASSWORD ?? "";
-  if (requireAuth && (!username || !password))
+  if ((username === "") !== (password === "")) {
     return {
       ok: false,
       error:
-        "REGISTRY_USERNAME and REGISTRY_PASSWORD must both be set in .env.deploy (copy .env.deploy.example)",
+        "Set both REGISTRY_USERNAME and REGISTRY_PASSWORD, or neither for an anonymous registry",
     };
+  }
 
   return {
     ok: true,
@@ -263,6 +266,7 @@ export function resolveDeployPlan({
       shortSha: tags.shortSha,
       username,
       password,
+      anonymous: username === "",
     },
   };
 }
@@ -292,7 +296,6 @@ function runCli() {
     image: option("--image"),
     version: option("--version"),
     sha: option("--sha"),
-    requireAuth: !flag("--no-auth"),
     includeLatest: !flag("--no-latest"),
   });
 

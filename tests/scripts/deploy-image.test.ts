@@ -187,28 +187,44 @@ describe("resolveDeployPlan", () => {
     expect(result.plan.image).toBe("hub.tnnlabs.space/other");
   });
 
-  it("refuses to push without credentials", () => {
+  it("plans an anonymous push when the registry has no credentials", () => {
+    // The tnnlabs registry accepts unauthenticated pushes, so credentials
+    // cannot be a hard requirement — but the plan has to say so explicitly,
+    // because `docker login` with an empty password is a confusing failure.
     const result = resolveDeployPlan({
       envText: "IMAGE=hub.tnnlabs.space/feedzero",
       version: "0.18.1",
       sha: SHA,
-      requireAuth: true,
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/REGISTRY_USERNAME and REGISTRY_PASSWORD/);
-  });
-
-  it("allows a local-only build without credentials", () => {
-    const result = resolveDeployPlan({
-      envText: "IMAGE=hub.tnnlabs.space/feedzero",
-      version: "0.18.1",
-      sha: SHA,
-      requireAuth: false,
     });
 
     expect(result.ok).toBe(true);
+    expect(result.plan.anonymous).toBe(true);
     expect(result.plan.username).toBe("");
+    expect(result.plan.password).toBe("");
+  });
+
+  it("rejects half-configured credentials", () => {
+    // A typo'd key leaves exactly one half set; that must not quietly become
+    // an anonymous push against a registry that does require auth.
+    const result = resolveDeployPlan({
+      envText: "IMAGE=hub.tnnlabs.space/feedzero\nREGISTRY_USERNAME=deploy",
+      version: "0.18.1",
+      sha: SHA,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/both REGISTRY_USERNAME and REGISTRY_PASSWORD/);
+  });
+
+  it("is not anonymous when both credentials are present", () => {
+    const result = resolveDeployPlan({
+      envText: env,
+      version: "0.18.1",
+      sha: SHA,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.plan.anonymous).toBe(false);
   });
 
   it("fails when no image is configured anywhere", () => {
@@ -243,7 +259,6 @@ describe("deploy-image CLI", () => {
         "--image",
         IMAGE,
         "--no-env-file",
-        "--no-auth",
       ],
       { cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
@@ -270,7 +285,6 @@ describe("deploy-image CLI", () => {
         IMAGE,
         "--deploy-env",
         ".env.deploy.does-not-exist",
-        "--no-auth",
       ],
       { cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
@@ -293,7 +307,6 @@ describe("deploy-image CLI", () => {
           "--image",
           "hub.tnnlabs.space/feedzero:latest",
           "--no-env-file",
-          "--no-auth",
         ],
         { cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
       );
@@ -314,14 +327,25 @@ describe(".env.deploy.example", () => {
     "utf8",
   );
 
-  it("documents the image and credential keys the script reads", () => {
-    for (const key of ["IMAGE", "REGISTRY_USERNAME", "REGISTRY_PASSWORD"]) {
-      expect(example, `missing ${key}`).toMatch(new RegExp(`^${key}=`, "m"));
+  it("documents the image and the optional credential keys", () => {
+    expect(example).toMatch(/^IMAGE=hub\.tnnlabs\.space\/feedzero$/m);
+    for (const key of ["REGISTRY_USERNAME", "REGISTRY_PASSWORD"]) {
+      expect(example, `missing ${key}`).toContain(key);
     }
   });
 
-  it("defaults to the fork owner's registry, not Docker Hub", () => {
-    expect(example).toMatch(/^IMAGE=hub\.tnnlabs\.space\/feedzero$/m);
+  it("plans an anonymous push from the template as-is", () => {
+    // The tnnlabs registry has no auth. The shipped template must be usable
+    // without uncommenting anything, or the first deploy fails on a doc step.
+    const plan = resolveDeployPlan({
+      envText: example,
+      version: "0.18.1",
+      sha: SHA,
+    });
+
+    expect(plan.ok).toBe(true);
+    expect(plan.plan.image).toBe("hub.tnnlabs.space/feedzero");
+    expect(plan.plan.anonymous).toBe(true);
   });
 
   it("is parsed cleanly by the same parser the script uses", () => {

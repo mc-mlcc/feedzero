@@ -39,6 +39,8 @@ export interface DeployPlanConfig {
   shortSha: string;
   username: string;
   password: string;
+  /** True when the registry accepts pushes without credentials. */
+  anonymous: boolean;
 }
 
 export interface DeployPlanResult {
@@ -66,6 +68,5 @@ export function resolveDeployPlan(params: {
   image?: string;
   version: string;
   sha: string;
-  requireAuth?: boolean;
   includeLatest?: boolean;
 }): DeployPlanResult;
