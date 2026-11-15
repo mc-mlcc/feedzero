@@ -228,6 +228,13 @@ export function resolveDeployPlan({
   if (!env.ok) return { ok: false, error: env.error };
 
   const imagePath = image || env.values.IMAGE || "";
+  if (!imagePath) {
+    return {
+      ok: false,
+      error:
+        "No image configured — copy .env.deploy.example to .env.deploy and set IMAGE, or pass -Image on the script.",
+    };
+  }
   const tags = computeImageTags({
     image: imagePath,
     version,

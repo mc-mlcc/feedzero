@@ -219,7 +219,7 @@ describe("resolveDeployPlan", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/image path is empty/);
+    expect(result.error).toMatch(/No image configured/);
   });
 });
 
